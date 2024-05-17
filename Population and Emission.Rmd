@@ -1,0 +1,397 @@
+---
+title: "Population and Emission"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+  error = TRUE,
+	message = FALSE,
+	warning = FALSE,
+	fig.height = 3
+)
+library(tidyverse)
+library(kableExtra)
+library(broman)
+library(modelr)
+library(scales)
+source("~/Documents/R/viridis.R")
+source("~/Documents/R/ggprob.R")
+theme_set(theme_minimal())
+```
+
+
+```{r include=FALSE}
+emissions_data = read_csv("Methane_final.csv")
+population_data = read_csv("population.csv")
+```
+<br>
+
+## Background
+
+#### Introduction
+
+*Could there be a relationship between a country’s population and the emissions produced by its energy sector?* This is the question that we chose to explore for our project. With the ever-growing problem of climate change, we think that this a very important topic to analyze. Climate change is primarily caused by greenhouse gas emissions, one of them being methane. In this project, we will be analyzing the relationship between a country's population and the methane emissions caused by it's energy sector.<br>
+In order to do this, we will be creating a scatter plot and performing a linear regression model to determine whether there is a correlation between population and energy emissions. We will then look into the different segments of energy to conclude which are the three largest contributors and create scatter plotxs for each segment. Our aim is to determine the relationship between a country’s population and energy emissions, and understand which energy segments have the most impact. 
+
+<br>
+
+## About our Data
+
+In order to answer our question, we used two datasets: Global Emissions and World Population Live Dataset 2022. <br>
+*Global Emissions* was scraped from the International Energy Agency, and it includes the country name and emissions from different sectors. *World Population Live Dataset 2022* ([Data Reference]), and it has the country name and population in 2022.<br>
+We extracted energy emissions by country in 2022 from the Global Emissions data set and joined it to the population and country from the World Population Live Dataset 2022 through inner join. This gave us 88 observations (countries) with columns of population and energy emissions. Even though there are 234 countries+territories in the world, not all of the countries have data related to energy emissions collected, which is why in the end, we only have 88 many observations. <br>
+
+In order to do this, we will create a scatter plot, determine the correlation coefficient, find the linear regression model for this dataset, and then take a look at segments within the energy sector. To understand the impacts of the segments, we created another dataset from Global Emissions, which has counts of each energy emission segment.
+
+<br>
+
+## Analysis
+
+*(Note - For each graph: The more concentrated the scattter points are, the more opaque it appears)*
+<br>
+
+We made a scatterplot with linear regression to show the relation between energy emission and population.
+First, we try to determine the relationship between population and energy emissions as a whole. To do this, we created a scatter plot with emissions on the y-axis, population on the x-axis, and each dot representing a country. We added a linear regression line to the plot, with the *red dashed lines at variable means* (the horizontal line being the mean emissions, and the vertical line being the mean population). The linear regression line, if a good fit,  should intersect at these red dashed lines. 
+
+<br>
+```{r}
+emissions = emissions_data %>% 
+  select(country, type, segment, emissions, baseYear) %>% filter(baseYear == 2022)
+
+population = population_data %>% 
+  select(Name, "2022") %>%
+  rename(country = Name,
+         population = "2022") %>% mutate(population = population * 1000)
+```
+
+```{r}
+emissions_total = emissions %>%
+  filter(segment == "Total") %>%
+  select(-type, -segment, -baseYear)
+
+# final_data
+pop_emissions_final = population %>%inner_join(emissions_total, by = "country")
+
+# emissions_column
+emissions_column = pop_emissions_final %>% pull(emissions)
+# population_column
+population_column = pop_emissions_final %>% pull(population)
+
+
+## Calculating mean
+mean_emissions = mean(emissions_column)
+# mean_emissions
+mean_population = mean(population_column)
+# mean_population
+
+options(scipen = 999)
+ggplot(pop_emissions_final, aes(x = population,  y = emissions)) + geom_point(alpha = 0.5) + xlab("Population") + ylab("Emissions (in kT)") + ggtitle("Emissions based on Population", subtitle = "2022") + geom_smooth(se = FALSE, method = "lm") +  geom_hline(yintercept = mean_emissions, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = mean_population, color = "red", linetype = "dashed") +
+  scale_x_continuous(labels = comma) +
+  scale_y_continuous(labels = comma)
+```
+
+<br>
+To better visualize the pattern of the scatter points, we scaled the axes by log 10.
+<br>
+
+```{r}
+options(scipen = 999)
+ggplot(pop_emissions_final, aes(x = population,  y = emissions)) + geom_point(alpha = 0.5) + xlab("Population (log10)") + ylab("Emissions (log10)") + ggtitle("Emissions based on Population (scaled by log10)", subtitle = "2022") + geom_smooth(se = FALSE, method = "lm") + 
+  scale_x_log10() +
+  scale_y_log10()
+```
+
+<br>
+We can observe that there is a positive relationship between population and emissions; as the population increases, the emissions will also increase. <br>
+To figure out the strength of the linear relationship between the two, we calculated their correlation coefficient r.
+
+$$
+r = \mathsf{Corr}(x,y) = \frac{1}{n-1}\sum_{i=1}^n
+\left(\frac{x_i - \bar{x}}{s_x} \right)
+\left(\frac{y_i - \bar{y}}{s_y} \right)
+$$
+
+From this formula, we get -
+
+```{r}
+# correlation
+correlation = cor(population_column, emissions_column)
+```
+
+> r = 0.6546355
+
+The value of r is moderate and positive. We can see that the points are more clustered around the blue line with a positive slope than around the horizontal red dashed line in the previous graph. This means that there is a moderately positive relationship between population and emissions. 
+
+
+```{r}
+pop_emissions_final_lm = lm(emissions_column ~ population_column, data = pop_emissions_final)
+
+cf = coef(pop_emissions_final_lm)
+#summary(pop_emissions_final_lm)
+# sigma(pop_emissions_final_lm)
+```
+
+```{r}
+## Coefficients and Summary Statistics
+xbar = mean(population_column)
+ybar = mean(emissions_column)
+sx = sd(population_column)
+sy = sd(emissions_column)
+r = cor(population_column,emissions_column)
+
+# c(xbar, ybar, sx, sy, r)
+
+b1 = r *sy/sx
+b0 = ybar - b1*xbar
+# b0
+# c(b0, b1)
+# cf
+```
+
+
+<br>
+
+To further understand how a change in population affects emissions, we will use a regression model to get an equation of the form -
+$$
+\hat{y}_i = \hat{\beta}_0 + \hat{\beta}_1 x_i,
+$$
+
+where $\hat{y}_i$ is the predicted response corresponding to $x_i$, and $\hat{\beta}_0$ and $\hat{\beta}_1$ are the estimated intercept and slope, respectively. 
+<br>
+
+To compute $\hat{\beta}_1$ and $\hat{\beta}_0$, we use the equation -
+
+$$
+\hat{\beta}_1 = r \times \frac{s_y}{s_x}
+$$
+
+$$
+\hat{\beta}_0 = \bar{y} - b_1 \bar{x}
+$$
+
+
+Then we have the slope $\hat{\beta}_1 = 1.153 × 10^{-5}$ (With every additional person in the population, the methane emissions grow by $1.153 × 10^{-5}$ kT) and the intercept $\hat{\beta}_0 = 548.5231$ (If the population of the country were to be 0 (nobody living there), the methane emissions would be 548.5231 kT.)
+
+<br>
+
+Now we want to test the residuals to make sure that there is no clear pattern.
+
+<br>
+```{r}
+# residual
+df_emissions <- pop_emissions_final %>%
+  add_residuals(pop_emissions_final_lm) %>%
+  add_predictions(pop_emissions_final_lm)
+
+ggplot(df_emissions, aes(x = population, y = resid)) +
+  geom_point(alpha = 0.5) +
+  xlab("Population") +
+  ylab("Residuals") +
+  geom_hline(aes(yintercept=0), color="red", linetype = "dashed") +
+  ggtitle("Residual Plot for linear model") +
+  scale_x_continuous(labels = comma) +
+  scale_y_continuous(labels = comma)
+```
+<br>
+
+We can observe that countries with very large populations have a high residual values.
+
+<br>
+
+From the summary of the linear regression model, we found that the *residual standard error is 879.9*. This is the average distance that the observed values fall from the regression line. The lower this value, the more closely a regression line is able to match the observed data. In this case, the average emissions falls 879.9 points away from the emissions predicted by the regression line. <br>
+This makes sense because, we have outliers that are very far away from the regression line. This can also be observed on the residual plot where you can observe 4 points that stand out as they have very large positive or negative residuals.
+
+<br>
+Thus, our equation is -
+
+$$
+Emission = 1.153 * {10^{-5}} * Population + 548.5231
+$$
+
+
+<br>
+However, these are only point estimates, we will standardize the residuals or errors and use a 95% confidence level to show our final results.
+
+```{r}
+ci = confint(pop_emissions_final_lm)
+```
+
+After calculating the 95% confidence interval, we are 95% sure that the true intercept of the regression line is between **-103.171888006134 and 1200.21801944526** and the true slope of the regression line is between **0.000008673024 and 0.00001437939**
+
+<br>
+
+To further analyze the relationship between population and the emissions caused by the energy sector, we delve into the segments of the energy sector. 
+We start by figuring out the top 3 segments which emit the most amount of emissions.
+<br>
+
+```{r}
+# emissions by segment
+emissions_by_segment = emissions %>% 
+  group_by(segment) %>%
+  summarize(total_emissions = sum(emissions)) %>% 
+  filter(segment != "Total") %>% arrange(desc(total_emissions)) 
+
+ggplot(emissions_by_segment, aes(x = total_emissions, y = reorder(segment, total_emissions))) + geom_col(aes(fill = total_emissions > 30000)) + xlab("Total Emissions (kT)") + ylab("Segments") + ggtitle("Total Emissions by Segments", subtitle = "Globally, 2022") + scale_fill_discrete(name = "Top 3 segments", labels = c("Yes", "No"))
+```
+<br>
+The three segments in yellow - Onshore oil, Steam & coal, and Onshore gas, are the top 3 contributors. 
+
+<br>
+
+We decided to explore the relationship between these three segments and population to get a deeper understanding of the overall relationship between energy emissions and population.
+<br>
+
+To do so, we made scatterplots with a linear regression line for each segment, with the red dashed lines at variable means (the horizontal line being the mean emissions, and the vertical line being the mean population).
+
+<br>
+
+```{r}
+## onshore_oil
+df_onshore_oil = emissions %>%
+  filter(segment == "Onshore oil") %>%
+  select(-type, -segment, -baseYear) %>%
+  group_by(country) %>% 
+  summarize(onshore_oil_emissions = sum(emissions))
+
+# final_data
+onshore_oil_final = population %>% inner_join(df_onshore_oil, by = "country") 
+
+# emissions_column
+emissions_column = onshore_oil_final %>% pull(onshore_oil_emissions)
+# population_column
+population_column = onshore_oil_final %>% pull(population)
+
+## Calculating mean
+mean_emissions = mean(emissions_column)
+# mean_emissions
+mean_population = mean(population_column)
+# mean_population
+
+options(scipen = 999)
+ggplot(onshore_oil_final, aes(x = population,  y = onshore_oil_emissions)) + geom_point(alpha = 0.5) + scale_x_continuous() + geom_smooth(se = FALSE, method = "lm") +  geom_hline(yintercept = mean_emissions, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = mean_population, color = "red", linetype = "dashed") + xlab("Population") + ylab("Onshore Oil Emissions (kT)") + ggtitle("Amount of Onshore Oil Emissions based on the Population", subtitle = ("2022")) +
+  scale_x_continuous(labels = comma) +
+  scale_y_continuous(labels = comma)
+
+# correlation
+correlation = cor(population_column, emissions_column)
+```
+<br>
+**r = 0.121**
+
+We can observe that the correlation is weakly positive. 
+
+<br>
+
+
+```{r}
+## steam_coal
+df_steam_coal = emissions %>%
+  filter(segment == "Steam coal") %>%
+  select(-type, -segment, -baseYear) %>%
+  group_by(country) %>% 
+  summarize(steam_coal_emissions = sum(emissions))
+
+# final_data
+steam_coal_final = population %>% inner_join(df_steam_coal, by = "country") 
+
+# emissions_column
+emissions_column = steam_coal_final %>% pull(steam_coal_emissions)
+# population_column
+population_column = steam_coal_final %>% pull(population)
+
+## Calculating mean
+mean_emissions = mean(emissions_column)
+# mean_emissions
+mean_population = mean(population_column)
+# mean_population
+
+options(scipen = 999)
+ggplot(steam_coal_final, aes(x = population,  y = steam_coal_emissions)) + geom_point(alpha = 0.5) + scale_x_continuous() + geom_smooth(se = FALSE, method = "lm") +  geom_hline(yintercept = mean_emissions, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = mean_population, color = "red", linetype = "dashed") + xlab("Population") + ylab("Steam Coal Emissions (kT)") + ggtitle("Amount of Steam Coal Emissions based on the Population", subtitle = ("2022")) +
+  scale_x_continuous(labels = comma) +
+  scale_y_continuous(labels = comma)
+
+# correlation
+correlation = cor(population_column, emissions_column)
+
+```
+<br>
+**r = 0.771**
+
+We can observe that the correlation is moderately positive.
+
+<br>
+
+
+```{r}
+## onshore_gas
+df_onshore_gas = emissions %>%
+  filter(segment == "Onshore gas") %>%
+  select(-type, -segment, -baseYear) %>%
+  group_by(country) %>% 
+  summarize(onshore_gas_emissions = sum(emissions))
+
+# final_data
+onshore_gas_final = population %>% inner_join(df_onshore_gas, by = "country") 
+
+# emissions_column
+emissions_column = onshore_gas_final %>% pull(onshore_gas_emissions)
+# population_column
+population_column = onshore_gas_final %>% pull(population)
+
+## Calculating mean
+mean_emissions = mean(emissions_column)
+# mean_emissions
+mean_population = mean(population_column)
+# mean_population
+
+options(scipen = 999)
+ggplot(onshore_gas_final, aes(x = population,  y = onshore_gas_emissions)) + geom_point(alpha = 0.5) + scale_x_continuous() + geom_smooth(se = FALSE, method = "lm") +  geom_hline(yintercept = mean_emissions, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = mean_population, color = "red", linetype = "dashed") + xlab("Population") + ylab("Onshore Gas Emissions (kT)") + ggtitle("Amount of Onshore Gas Emissions based on the Population", subtitle = ("2022")) +
+  scale_x_continuous(labels = comma) +
+  scale_y_continuous(labels = comma)
+
+# correlation
+correlation = cor(population_column, emissions_column)
+
+# r is weak and positive ie no relation
+```
+<br>
+**r = 0.164**
+
+We can observe that the correlation is weakly positive.
+<br>
+
+> Overall we can see that there is a *weakly positive relationship between emissions caused by onshore oil and gas and population*, while there is a *moderate positive relationship between steam & coal and population*. <br>
+This makes sense because onshore oil and gas emissions largely depend on where they are being extracted from and not on the population whereas the emissions caused by steam and coal (used for transport) are more dependent on population.
+
+<br>
+
+## Discussion
+Based on our data analysis we can get a better picture of how population affects the emission caused by the energy sector. While there is a moderately positive linear relationship overall (emissions and population); when we look at the segments of the energy sector, the strength of the relationship varies. 
+This makes sense because some segments cause more emission when they are being extracted vs when they are being used, while others do the exact opposite. This answers our initial question of how population affects the energy emissions. <br>
+Overall, our analysis proves that there is a relationship between population and emissions caused by the energy sector. Relationships like these could help us in identifying how a country can reduce its emissions (based on its population). They could also lead to further studies in this area and help scientists and lawmakers to come up with more effective policies to reduce methane emissions, thereby helping solve the problem of climate change.
+
+<br>
+
+#### Shortcomings
+There were a few outliers in our scatter plot, including countries such as India (high population and low energy emission), but this is inevitable as there are other factors that affect emissions other than population. 
+Our overall analysis also only included 88 countries (there are 324 countries and territories overall). Although the number of observations is big enough for a sample size, more observations would yield more accurate results. 
+
+<br>
+
+#### Future Questions
+In the future, we can look into the relationship between population and emissions from other sectors such as agriculture, transportation, etc which could help us understand the overall effect of population on the methane emissions caused by the world.
+
+<br>
+
+## Data Reference
+
+- ashishraut64. “Global Emissions - Information about the methane gas emissions from various sources.” Kaggle, 27 Mar. 2018, https://www.kaggle.com/datasets/ashishraut64/global-methane-emissions
+- Chauhan, Aman. “World Population Live Dataset 2022.” Kaggle, 10 Sep. 2022, https://www.kaggle.com/datasets/whenamancodes/world-population-live-dataset
+
+<!-- Thank you -->
